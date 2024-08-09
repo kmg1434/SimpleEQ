@@ -112,6 +112,9 @@ void SimpleEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     auto peakCoefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
                                                                                 chainSettings.peakFreq,
                                                                                 chainSettings.peakQuality, juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
+    *leftChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+    *rightChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+
 }
 
 void SimpleEQAudioProcessor::releaseResources()
@@ -160,6 +163,14 @@ void SimpleEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
+    
+    auto chainSettings = getChainSettings(apvts);
+    
+    auto peakCoefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(),
+                                                                                chainSettings.peakFreq,
+                                                                                chainSettings.peakQuality, juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
+    *leftChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+    *rightChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
 
     juce::dsp::AudioBlock<float> block(buffer); // represents individual channel
     
@@ -220,24 +231,25 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     SimpleEQAudioProcessor::createParameterLayout()
 {
     // constants
-    float LOW_THRESHOLD = 20.f;
-    float HIGH_THRESHOLD = 20000.f;
+    float LOW_THRESHOLD = 20.f; // low threshold of human hearing
+    float HIGH_THRESHOLD = 20000.f; // high threshold of human hearing
+    float FADER_SKEW = 0.25f; // skews fader to be closer to logorithmic
     
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     
     layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("Low Cut Freq", 1),
                                                            "Low Cut Freq",
-                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, 1.f),
+                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, FADER_SKEW),
                                                            20.f));
     
     layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("High Cut Freq", 1),
                                                            "High Cut Freq",
-                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, 1.f),
+                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, FADER_SKEW),
                                                            20000.f));
     
     layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("Peak Freq", 1),
                                                            "Peak Freq",
-                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, 1.f),
+                                                           juce::NormalisableRange<float>(LOW_THRESHOLD, HIGH_THRESHOLD, 1.f, FADER_SKEW),
                                                            750.f));
     
     layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("Peak Gain" , 1),
